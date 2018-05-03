@@ -1,0 +1,101 @@
+#!/bin/sh
+## Fancy Info Box ########################################################
+# I recently bought a bunch of 3.5" floppy disks at a local thrift shop. #
+# "Why?" you ask? Because most people don't have floppy disk drives      #
+# these days, so it seems to me a great way to keep the backups of my    #
+# most important documents private!                                      #
+#                                                                        #
+# Some of the floppies I bought already contained data. Out of respect   #
+# for the privacy of the previous owners, I decided to do a Gutmann      #
+# Method data shred on them (with a few extra passes of 0's and 1's) to  #
+# ensure their data couldn't be recovered. After, I formatted them with  #
+# ext4 to take advantage of filesystem-level encryption, and I had mkfs  #
+# check for damage (hey, they're old, and I don't want to loose data!).  #
+# From there, I setup an encrypted folder, wrote a blank file to it,     #
+# filled it with 1's, then ran shred on it, literally encrypting         #
+# randomly generated data to guard against data analysis (i.e. to have   #
+# my actual data blend in with encrypted "background noise" to make it   #
+# difficult to tell between real and fake data).                         #
+#                                                                        #
+# All of this resulted in quite a bit of repeating commands (I bought    #
+# quite a few floppies!), so I made this script. It's meant mainly for   #
+# floppies and older hard disks (Gutmann himself said the Gutmann Method #
+# isn't useful for recent hard disks). As an extra layer of protection   #
+# for your floppies, you can modify your floppy disk drive by swapping   #
+# the connectors for the read/write heads: the floppy disk drive is too  #
+# stupid to know which head is which, so by swapping the connectors you  #
+# are tricking it into thinking that the top head is the bottom one and  #
+# vice versa. Any floppy disk formatted in a drive modified like this    #
+# show up as unformatted in an unmodified drive (and vice versa), thus   #
+# tricking (most) people that wouldn't think of this into thinking that  #
+# there really isn't anything stored on your floppy disks. Combine that  #
+# with ext4's builtin encryption and the fact that most people can't use #
+# floppies anyway, and you really have a recipe for keeping things       #
+# (Oh, but if you live near me, keep an unmoddified drive around to case #
+# you find one of my floppies - I don't want you looking at my stuff!)   #
+#                                                                        #
+# WARNING!!! DO NOT, UNDER ANY CIRCUMSTANCE, RUN THIS SCRIPT ON A FLASH- #
+# BASED STORAGE DEVICE YOU ACTUALLY INTEND TO USE! SERIOUSLY, DON'T DO   #
+# IT!
+# Flash-based storage devices have a limited amount of writes - you WILL #
+# shorten it's life quite a bit by running this script on it. PLUS! The  #
+# device's builtin wear-levelling and "bad sector hiding" removes any    #
+# guarantee that repeated overwriting will securely erase any data. If   #
+# you really want to keep the data on your flash devices safe, set it up #
+# with strong device-level encryption (crypto-luks, etc.) *before* you   #
+# put anything private on it. 256-bit AES encryption seems like a good   #
+# bet. Use something stronger if it's available by the time you read     #
+# this.                                                                  #
+##########################################################################
+
+mnt=/mnt
+dev=/dev/sdb
+datadir="${mnt}/Documents"
+
+## Data erasing ##
+# Zero-fill
+shred -fvzn0 /dev/sdb
+# One-fill
+tr '\0' '\377' < /dev/zero > /dev/sdb
+sync
+# Gutmann Method
+shred -fvn35 /dev/sdb
+# One-fill (to help cover our tracks)
+tr '\0' '\377' < /dev/zero > /dev/sdb
+sync
+# Zero-fill (to help cover our tracks)
+shred -fvzn0 /dev/sdb
+## Formatting ##
+# -b4096          - ext4 requires a block size of 4096 for encryption
+# -cc             - try really hard to find damaged sectors so we don't
+#                   loose data
+# -O ^has_journal - floppy disks don't have much space and we are loosing
+#                   a bit with the large block size. Disabling journal to
+#                   save on space
+# -O encrypt      - tell the mkfs utility we intend to use filesystem-
+#                   level encryption
+mkfs.ext4 -b4096 -cc -O ^has_journal -O encrypt "${dev}"
+## Set up encryption ##
+# Mount the disk
+mount "${dev}" "${mnt}"
+# Make a folder to store encrypted data in
+mkdir "${datadir}"
+# Ask for a passphrase for ext4's encryption
+e4crypt add_key
+# Ask the user to enter the session key given by e4crypt
+read -p "Enter the session key: " sesskey
+# Use the session key to encrypt the data folder
+e4crypt set_policy "${sesskey}" "${datadir}"
+# Create a blank file, fill it with 1's. We aren't working at the block
+#level here, so we need to call `sync` both times.
+dd if=/dev/zero of="${datadir}/FFFFFFFF"
+sync
+tr '\0' '\377' < /dev/zero > "${datadir}/FFFFFFFF"
+sync
+# Shred & remove the file created above. Since we are doing this in the
+# encrypted folder, ext4 will actually encrypt the random data being
+# written to the file, creating some 'background noise' that should
+# blend in seemlessly with our real data.
+shred -fuv "${datadir}/FFFFFFFF"
+## Fin ##
+umount "${mnt}"

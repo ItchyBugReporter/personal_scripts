@@ -1,4 +1,13 @@
-# personal_scripts These are various scripts I have created to make some
-tasks easier. There aren't many here now, but I will be adding to them
-as I need them. If you find any of them useful, feel free to grab them
-and use them.
+# personal_scripts
+These are various scripts I have created to make some tasks easier. There
+aren't many here now, but I will be adding to them as I need them. If
+you find any of them useful, feel free to grab them and use them.
+
+Each script will have a "fancy info box" giving some background
+information about why I created the script. If relevant, I will give some
+information on how to use the script other than using `./${script_name}`.
+
+
+== Why a README instead of a README.md ==
+Because I don't see a need to use MarkDown for a simple README. MarkDown
+can be great for some stuff, but not so much for a plain-text README.
